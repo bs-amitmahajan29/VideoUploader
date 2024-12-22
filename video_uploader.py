@@ -11,9 +11,8 @@ with open('config/config.json') as config_file:
     config = json.load(config_file)
 
 API_TOKENS = config['api_token']
-
-UPLOAD_FOLDER = 'uploads'
-DB_FILE = 'config/video_uploader.db'
+UPLOAD_FOLDER = config['upload_directory']
+DB_FILE = config['db_file']
 
 # Initialize app
 app = FastAPI()
