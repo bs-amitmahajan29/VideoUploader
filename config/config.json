@@ -1,6 +1,6 @@
 {
     "api_token": ["token1", "token2"],
-    "min_duration": 4,
-    "max_duration": 10,
-    "max_size_bytes": 10000000
+    "min_duration": 2,
+    "max_duration": 300,
+    "max_size_bytes": 100000000
 }

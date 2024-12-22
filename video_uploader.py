@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header
+from pydantic import BaseModel
 import os
 import uuid
 import json
@@ -26,7 +27,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS videos (
             id TEXT PRIMARY KEY,
             filename TEXT NOT NULL,
-            uploaded_at DATETIME NOT NULL
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL
         )
     ''')
     conn.commit()
@@ -40,6 +42,11 @@ def authenticate(api_token: str = Header(None)):
     if api_token not in API_TOKENS:
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid API token")
     return True
+
+class TrimRequest(BaseModel):
+    video_id: str
+    start_time: float = 0
+    end_time: float = None
 
 @app.post("/check_api_token")
 async def check_api_token(api_token: str = Header(None)):
@@ -78,9 +85,63 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
     video_id = str(uuid.uuid4())
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO videos (id, filename, uploaded_at) VALUES (?, ?, ?)',
-                   (video_id, filename, datetime.now()))
+    cursor.execute('INSERT INTO videos (id, filename, created_at, updated_at) VALUES (?, ?, ?, ?)',
+                   (video_id, filename, datetime.now(), datetime.now()))
     conn.commit()
     conn.close()
 
     return {"video_id": video_id, "filename": filename}
+
+@app.post("/trim")
+async def trim_video(request: TrimRequest, api_token: str = Header(None)):
+    authenticate(api_token)
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, filename FROM videos WHERE id = ?', (request.video_id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    filename = result[1]
+    video_id = result[0]
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    cap = cv2.VideoCapture(filepath)
+    if not cap.isOpened():
+        raise HTTPException(status_code=400, detail="Invalid video file")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    start_frame = int(request.start_time * fps)
+    end_time = request.end_time or (cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps)
+    end_frame = int(end_time * fps)
+
+    trimmed_filename = f"trimmed_{filename}"
+    trimmed_filepath = os.path.join(UPLOAD_FOLDER, trimmed_filename)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(trimmed_filepath, fourcc, fps, (
+        int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+        int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    ))
+    frame_count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret or frame_count > end_frame:
+            break
+        if frame_count >= start_frame:
+            out.write(frame)
+        frame_count += 1
+    cap.release()
+    out.release()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('UPDATE videos SET filename = ?, updated_at = ? WHERE id = ?',
+                   (trimmed_filename, datetime.now(), video_id))
+    conn.commit()
+    conn.close()
+    os.remove(filepath)
+
+    return {"video_id": video_id, "filename": trimmed_filename}
