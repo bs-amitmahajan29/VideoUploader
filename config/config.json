@@ -1,8 +1,9 @@
 {
     "api_token": ["token1", "token2"],
-    "min_duration": 2,
-    "max_duration": 300,
+    "min_duration_sec": 2,
+    "max_duration_sec": 300,
     "max_size_bytes": 100000000,
     "upload_directory": "uploads",
-    "db_file": "config/video_uploader.db"
+    "db_file": "config/video_uploader.db",
+    "share_file_expiry_sec": 600
 }

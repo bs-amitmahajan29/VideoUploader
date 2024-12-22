@@ -1,10 +1,11 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
 import uuid
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import cv2
 
 with open('config/config.json') as config_file:
@@ -30,6 +31,15 @@ def init_db():
             updated_at DATETIME NOT NULL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS shared_links (
+            id TEXT PRIMARY KEY,
+            video_id TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY(video_id) REFERENCES videos(id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -46,6 +56,10 @@ class TrimRequest(BaseModel):
     video_id: str
     start_time: float = 0
     end_time: float = None
+
+class ShareRequest(BaseModel):
+    video_id: str
+    expiry_sec: int = config['share_file_expiry_sec']
 
 @app.post("/check_api_token")
 async def check_api_token(api_token: str = Header(None)):
@@ -77,7 +91,7 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
     duration = frame_count / fps
     cap.release()
 
-    if duration < config['min_duration'] or duration > config['max_duration']:
+    if duration < config['min_duration_sec'] or duration > config['max_duration_sec']:
         os.remove(filepath)
         raise HTTPException(status_code=400, detail="Video duration is out of allowed range")
     
@@ -144,3 +158,52 @@ async def trim_video(request: TrimRequest, api_token: str = Header(None)):
     os.remove(filepath)
 
     return {"video_id": video_id, "filename": trimmed_filename}
+
+@app.post("/share")
+async def share_video(request: ShareRequest, api_token: str = Header(None)):
+    authenticate(api_token)
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT filename FROM videos WHERE id = ?', (request.video_id,))
+    result = cursor.fetchone()
+    if not result:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    link_id = str(uuid.uuid4())
+    now_time = datetime.now()
+    expires_at = now_time + timedelta(seconds=request.expiry_sec)
+    cursor.execute('INSERT INTO shared_links (id, video_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+                   (link_id, request.video_id, now_time, expires_at))
+    conn.commit()
+    conn.close()
+
+    return {"video_id": request.video_id, "expires_at": expires_at, "link_id": link_id}
+
+@app.get("/download/{link_id}")
+async def download_video(link_id: str):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT video_id, expires_at FROM shared_links WHERE id = ?', (link_id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    video_id, expires_at = result
+    if datetime.now() > datetime.fromisoformat(expires_at):
+        raise HTTPException(status_code=410, detail="Link has expired")
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT filename FROM videos WHERE id = ?', (video_id,))
+    video_result = cursor.fetchone()
+    conn.close()
+
+    if not video_result:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    filename = video_result[0]
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    return FileResponse(filepath, filename=filename)
