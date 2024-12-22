@@ -135,6 +135,7 @@ video_uploader_env/
 ENV/
 env.bak/
 venv.bak/
+uploads/
 
 # Spyder project settings
 .spyderproject

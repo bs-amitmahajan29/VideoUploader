@@ -1,6 +1,9 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header
 import os
+import uuid
 import json
+import sqlite3
+from datetime import datetime
 import cv2
 
 with open('config/config.json') as config_file:
@@ -14,6 +17,22 @@ DB_FILE = 'config/video_uploader.db'
 # Initialize app
 app = FastAPI()
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Database setup
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS videos (
+            id TEXT PRIMARY KEY,
+            filename TEXT NOT NULL,
+            uploaded_at DATETIME NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 def authenticate(api_token: str = Header(None)):
     if not api_token:
@@ -55,5 +74,13 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
     if duration < config['min_duration'] or duration > config['max_duration']:
         os.remove(filepath)
         raise HTTPException(status_code=400, detail="Video duration is out of allowed range")
+    
+    video_id = str(uuid.uuid4())
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO videos (id, filename, uploaded_at) VALUES (?, ?, ?)',
+                   (video_id, filename, datetime.now()))
+    conn.commit()
+    conn.close()
 
-    return {"filename": filename}
+    return {"video_id": video_id, "filename": filename}
