@@ -72,7 +72,7 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
 
     file_size = len(await file.read())
     if file_size > config['max_size_bytes']:
-        raise HTTPException(status_code=400, detail="File size exceeds the allowed limit")
+        raise HTTPException(status_code=400, detail=f"File size exceeds the allowed limit of {config['max_size_bytes']} bytes")
 
     await file.seek(0)
     filename = file.filename
@@ -93,7 +93,7 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
 
     if duration < config['min_duration_sec'] or duration > config['max_duration_sec']:
         os.remove(filepath)
-        raise HTTPException(status_code=400, detail="Video duration is out of allowed range")
+        raise HTTPException(status_code=400, detail=f"Video duration between {config['min_duration_sec']}s to {config['max_duration_sec']}s are only allowed")
     
     video_id = str(uuid.uuid4())
     conn = sqlite3.connect(DB_FILE)
@@ -116,7 +116,7 @@ async def trim_video(request: TrimRequest, api_token: str = Header(None)):
     conn.close()
 
     if not result:
-        raise HTTPException(status_code=404, detail="Video not found")
+        raise HTTPException(status_code=404, detail=f"Video {request.video_id} not found")
 
     filename = result[1]
     video_id = result[0]
@@ -124,7 +124,7 @@ async def trim_video(request: TrimRequest, api_token: str = Header(None)):
 
     cap = cv2.VideoCapture(filepath)
     if not cap.isOpened():
-        raise HTTPException(status_code=400, detail="Invalid video file")
+        raise HTTPException(status_code=400, detail=f"Invalid video ({request.video_id}) file")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     start_frame = int(request.start_time * fps)
@@ -168,7 +168,7 @@ async def share_video(request: ShareRequest, api_token: str = Header(None)):
     cursor.execute('SELECT filename FROM videos WHERE id = ?', (request.video_id,))
     result = cursor.fetchone()
     if not result:
-        raise HTTPException(status_code=404, detail="Video not found")
+        raise HTTPException(status_code=404, detail=f"Video {request.video_id} not found")
 
     link_id = str(uuid.uuid4())
     now_time = datetime.now()
@@ -189,11 +189,11 @@ async def download_video(link_id: str):
     conn.close()
 
     if not result:
-        raise HTTPException(status_code=404, detail="Link not found")
+        raise HTTPException(status_code=404, detail=f"Link {link_id} not found")
 
     video_id, expires_at = result
     if datetime.now() > datetime.fromisoformat(expires_at):
-        raise HTTPException(status_code=410, detail="Link has expired")
+        raise HTTPException(status_code=410, detail=f"Link {link_id} has expired at {datetime.fromisoformat(expires_at)}")
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -202,7 +202,7 @@ async def download_video(link_id: str):
     conn.close()
 
     if not video_result:
-        raise HTTPException(status_code=404, detail="Video not found")
+        raise HTTPException(status_code=404, detail=f"Video {video_id} not found")
 
     filename = video_result[0]
     filepath = os.path.join(UPLOAD_FOLDER, filename)
