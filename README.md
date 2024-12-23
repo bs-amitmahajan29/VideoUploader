@@ -8,9 +8,10 @@ This repository contains a FastAPI application for managing video uploads, trimm
 2. [Requirements](#requirements)
 3. [Setup and Installation](#setup-and-installation)
 4. [Running the Application](#running-the-application)
-5. [API Endpoints](#api-endpoints)
-6. [Folder Structure](#folder-structure)
-7. [Configuration](#configuration)
+5. [Running the Tests](#running-the-tests)
+6. [API Endpoints](#api-endpoints)
+7. [Folder Structure](#folder-structure)
+8. [Configuration](#configuration)
 
 ## Features
 
@@ -70,6 +71,26 @@ fastapi dev video_uploader.py
 ```
 
 By default, the application runs on `http://127.0.0.1:8000`.
+
+## Running the Tests
+
+Return `True` from `def authenticate(api_token: str = Header(None)):` in `video_uploader.py`. (This is because I haven't yet been able to mock this function run)
+Post that run:
+```bash
+pytest --cov
+```
+
+Coverage Results
+```
+---------- coverage: platform darwin, python 3.9.6-final-0 -----------
+Name                     Stmts   Miss  Cover
+--------------------------------------------
+__init__.py                  0      0   100%
+test_video_uploader.py      78      0   100%
+video_uploader.py          199     20    90%
+--------------------------------------------
+TOTAL                      277     20    93%
+```
 
 ## API Endpoints
 
