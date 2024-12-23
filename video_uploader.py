@@ -15,8 +15,31 @@ API_TOKENS = config['api_token']
 UPLOAD_FOLDER = config['upload_directory']
 DB_FILE = config['db_file']
 
+routes_metadata = [
+    {
+        "name": "check_api_token",
+        "description": "This is a test route to check if the authentication from header based api_token is working or not.",
+    },
+    {
+        "name": "upload_video",
+        "description": "This route is used to upload a video file in /uploads folder as per the given specifications in config.json.",
+    },
+    {
+        "name": "trim_video",
+        "description": "This route is used to trim the video from start/end.",
+    },
+    {
+        "name": "share_video",
+        "description": "This route is used to generate a time-expiry based shareable url for the already uploaded videos. The download_video route can be used in succession with this to download via the generated url",
+    },
+    {
+        "name": "merge_videos",
+        "description": "This route is used to merge the already uploaded videos into a single video.",
+    },
+]
+
 # Initialize app
-app = FastAPI()
+app = FastAPI(openapi_tags=routes_metadata)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Database setup
@@ -64,12 +87,12 @@ class ShareRequest(BaseModel):
 class MergeRequest(BaseModel):
     video_ids: list
 
-@app.post("/check_api_token")
+@app.post("/check_api_token", tags=["check_api_token"])
 async def check_api_token(api_token: str = Header(None)):
     authorized = authenticate(api_token)
     return {"Authorized": authorized}
 
-@app.post("/upload")
+@app.post("/upload", tags=["upload_video"])
 async def upload_video(file: UploadFile = File(...), api_token: str = Header(None)):
     authenticate(api_token)
 
@@ -108,7 +131,7 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
 
     return {"video_id": video_id, "filename": filename}
 
-@app.post("/trim")
+@app.post("/trim", tags=["trim_video"])
 async def trim_video(request: TrimRequest, api_token: str = Header(None)):
     authenticate(api_token)
 
@@ -174,7 +197,7 @@ async def trim_video(request: TrimRequest, api_token: str = Header(None)):
 
     return {"video_id": video_id, "filename": trimmed_filename}
 
-@app.post("/share")
+@app.post("/share", tags=["share_video"])
 async def share_video(request: ShareRequest, api_token: str = Header(None)):
     authenticate(api_token)
 
@@ -195,7 +218,7 @@ async def share_video(request: ShareRequest, api_token: str = Header(None)):
 
     return {"video_id": request.video_id, "expires_at": expires_at, "link_id": link_id}
 
-@app.get("/download/{link_id}")
+@app.get("/download/{link_id}", tags=["share_video"])
 async def download_video(link_id: str):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -223,7 +246,7 @@ async def download_video(link_id: str):
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     return FileResponse(filepath, filename=filename)
 
-@app.post("/merge")
+@app.post("/merge", tags=["merge_videos"])
 async def merge_videos(request: MergeRequest, api_token: str = Header(None)):
     authenticate(api_token)
 
