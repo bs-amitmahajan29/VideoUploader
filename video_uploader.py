@@ -112,6 +112,9 @@ async def upload_video(file: UploadFile = File(...), api_token: str = Header(Non
 async def trim_video(request: TrimRequest, api_token: str = Header(None)):
     authenticate(api_token)
 
+    if request.end_time and request.start_time and request.end_time < request.start_time:
+        raise HTTPException(status_code=400, detail=f"end_time {request.end_time}s is less than start_time {request.start_time}s")
+
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('SELECT id, filename FROM videos WHERE id = ?', (request.video_id,))
@@ -130,6 +133,15 @@ async def trim_video(request: TrimRequest, api_token: str = Header(None)):
         raise HTTPException(status_code=400, detail=f"Invalid video ({request.video_id}) file")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_duration = total_frames / fps
+    if request.end_time and request.end_time > total_duration:
+        cap.release()
+        raise HTTPException(status_code=400, detail=f"end_time {request.end_time}s exceeds video duration of {total_duration}s")
+    if request.start_time and request.start_time > total_duration:
+        cap.release()
+        raise HTTPException(status_code=400, detail=f"start_time {request.end_time}s exceeds video duration {total_duration}s")
+
     start_frame = int(request.start_time * fps)
     end_time = request.end_time or (cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps)
     end_frame = int(end_time * fps)
