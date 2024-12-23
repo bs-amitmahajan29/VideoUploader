@@ -61,6 +61,9 @@ class ShareRequest(BaseModel):
     video_id: str
     expiry_sec: int = config['share_file_expiry_sec']
 
+class MergeRequest(BaseModel):
+    video_ids: list
+
 @app.post("/check_api_token")
 async def check_api_token(api_token: str = Header(None)):
     authorized = authenticate(api_token)
@@ -207,3 +210,51 @@ async def download_video(link_id: str):
     filename = video_result[0]
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     return FileResponse(filepath, filename=filename)
+
+@app.post("/merge")
+async def merge_videos(request: MergeRequest, api_token: str = Header(None)):
+    authenticate(api_token)
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    filenames = []
+    for video_id in request.video_ids:
+        cursor.execute('SELECT filename FROM videos WHERE id = ?', (video_id,))
+        result = cursor.fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Video with id {video_id} not found")
+        filenames.append(result[0])
+    conn.close()
+
+    video_id = uuid.uuid4()
+    merged_filename = f"merged_{video_id.hex}.mp4"
+    merged_filepath = os.path.join(UPLOAD_FOLDER, merged_filename)
+
+    first_cap = cv2.VideoCapture(os.path.join(UPLOAD_FOLDER, filenames[0]))
+    fps = first_cap.get(cv2.CAP_PROP_FPS)
+    width = int(first_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(first_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    first_cap.release()
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(merged_filepath, fourcc, fps, (width, height))
+
+    for filename in filenames:
+        cap = cv2.VideoCapture(os.path.join(UPLOAD_FOLDER, filename))
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            out.write(frame)
+        cap.release()
+
+    out.release()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO videos (id, filename, created_at, updated_at) VALUES (?, ?, ?, ?)',
+                   (str(video_id), merged_filename, datetime.now(), datetime.now()))
+    conn.commit()
+    conn.close()
+
+    return {"video_id": str(video_id), "filename": merged_filename}
