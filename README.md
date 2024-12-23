@@ -12,6 +12,7 @@ This repository contains a FastAPI application for managing video uploads, trimm
 6. [API Endpoints](#api-endpoints)
 7. [Folder Structure](#folder-structure)
 8. [Configuration](#configuration)
+9. [Citation and References](#citation-and-references)
 
 ## Features
 
@@ -131,3 +132,14 @@ The `config/config.json` file contains application settings. Key options:
 - `share_file_expiry_sec`: Default expiry time for shared links in seconds.
 
 ---
+
+## Citation and References
+
+Below references were used in the project
+
+- https://fastapi.tiangolo.com/
+- https://www.geeksforgeeks.org/opencv-python-tutorial/
+- https://stackoverflow.com/questions/60716529/download-file-using-fastapi
+- https://www.geeksforgeeks.org/python-writing-to-video-with-opencv/
+- https://www.geeksforgeeks.org/get-video-duration-using-python-opencv/
+- https://karobben.github.io/2021/04/10/Python/opencv-v-paste/
